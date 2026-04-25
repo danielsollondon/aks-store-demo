@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aks-store-demo
+  namespace: aks-store-pipe
+  labels:
+    app: aks-store-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aks-store-demo
+  template:
+    metadata:
+      labels:
+        app: aks-store-demo
+    spec:
+      nodeSelector:
+        "kubernetes.io/os": linux
+      securityContext:
+        runAsNonRoot: false # explicitly disabled per deployment configuration
+      containers:
+        - name: aks-store-demo
+          image: ghcr.io/azure-samples/aks-store-demo/store-front:2.1.0
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false # explicitly disabled per deployment configuration
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 5
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          startupProbe:
+            httpGet:
+              path: /
+              port: 80
+            failureThreshold: 30
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - aks-store-demo
+                topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: aks-store-demo
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aks-store-demo
+  namespace: aks-store-pipe
+  labels:
+    app: aks-store-demo
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: aks-store-demo
